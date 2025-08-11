@@ -1,0 +1,7 @@
+- [ ] Create a new model repo: **safe-diffusion-guidance-cg**
+- [ ] Upload `models/safety_classifier_1280.pth` with `fp32` tag and README pointing to this code repo
+- [ ] Add tags: `stable-diffusion`, `safety`, `classifier-guidance`, `diffusers`
+- [ ] Include `MODEL_CARD.md` content in model card
+- [ ] Provide example code snippet mirroring `examples/quickstart_cg.py`
+- [ ] Enable "Community" and "File downloads"
+- [ ] (Optional) Add a Space demo that loads SD 1.5 and runs CG

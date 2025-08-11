@@ -1,0 +1,27 @@
+[project]
+name = "safe-diffusion-cg"
+version = "0.1.0"
+description = "Classifier Guidance (CG) for Stable Diffusion using a mid-block safety classifier"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Your Name" }]
+keywords = ["diffusion", "stable-diffusion", "safety", "content-moderation", "classifier-guidance"]
+
+dependencies = [
+  "torch>=2.1.0",
+  "diffusers>=0.27.0",
+  "transformers>=4.40.0",
+  "accelerate>=0.27.0",
+  "safetensors>=0.4.2",
+  "Pillow>=10.0.0",
+  "numpy>=1.24.0",
+  "tqdm>=4.66.0"
+]
+
+[project.scripts]
+sdg = "sdg.cli:app"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
