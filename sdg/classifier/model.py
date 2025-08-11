@@ -1,56 +1,83 @@
-# sdg/classifier/model.py
+
+# --- file: sdg/classifier/model.py ---
+
 import torch
 import torch.nn as nn
-import logging
+from typing import Optional
+
+try:
+    from huggingface_hub import hf_hub_download
+    _HAS_HF = True
+except Exception:
+    _HAS_HF = False
 
 CLASSIFIER_CLASS_NAMES = ['gore', 'hate', 'medical', 'safe', 'sexual']
 
-class AdaptiveClassifier(nn.Module):
-    """
-    Minimal CNN branch matching your training config:
-    - Expects (B, 1280, 8, 8) features (mid-block tensor)
-    - Outputs logits for 5 classes
-    """
-    def __init__(self, input_shape=(1280, 8, 8), num_classes=5):
+
+class GlobalAvgPool(nn.Module):
+    def forward(self, x):
+        # x: (B, C, H, W)
+        return x.mean(dim=[2, 3])
+
+
+class Classifier1280(nn.Module):
+    """Minimal classifier for mid-block features with 1280 channels."""
+    def __init__(self, num_classes=5):
         super().__init__()
-        c, h, w = input_shape
-        self.features = nn.Sequential(
-            nn.Conv2d(c, 512, kernel_size=1),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 128, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d(1),
-            nn.Flatten()
-        )
-        self.classifier = nn.Sequential(
-            nn.Linear(128, 256),
-            nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
-            nn.Linear(256, num_classes)
+        self.net = nn.Sequential(
+            GlobalAvgPool(),              # (B,1280)
+            nn.LayerNorm(1280),
+            nn.Linear(1280, 512),
+            nn.GELU(),
+            nn.Linear(512, num_classes),
         )
 
     def forward(self, x):
-        # Accept (B, C, H, W) or (C, H, W) and add batch if needed
-        if x.dim() == 3:
-            x = x.unsqueeze(0)
-        x = self.features(x)
-        return self.classifier(x)
+        return self.net(x)
 
-def load_trained_classifier(checkpoint_path: str, device='auto'):
-    """
-    Load weights saved by your training script (adaptive_classifiers.py style).
-    """
-    if device == 'auto':
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = AdaptiveClassifier(input_shape=(1280, 8, 8), num_classes=5).to(device)
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    # Try the common keys used in your project
-    state = (
-        ckpt.get('model_state_dict')
-        or ckpt.get('state_dict')
-        or ckpt  # raw state dict
-    )
-    model.load_state_dict(state, strict=False)
-    model.eval()
-    logging.info(f"Loaded classifier: {checkpoint_path} on {device}")
+
+class Classifier320(nn.Module):
+    def __init__(self, num_classes=5):
+        super().__init__()
+        self.net = nn.Sequential(
+            GlobalAvgPool(),              # (B,320)
+            nn.LayerNorm(320),
+            nn.Linear(320, 256),
+            nn.GELU(),
+            nn.Linear(256, num_classes),
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+
+def get_classifier(sd_version: str, num_classes: int = 5) -> nn.Module:
+    # For SD 1.4 / 1.5 / 2.1 mid-block channels are 1280 for base checkpoints
+    # If your weights are 1280, prefer Classifier1280 regardless of variant
+    return Classifier1280(num_classes=num_classes)
+
+
+def load_classifier_weights(model: nn.Module, repo_or_path: Optional[str], filename: str = "safety_classifier_1280.pth"):
+    """Load weights either from a local path or a Hugging Face repo id."""
+    file_path = None
+    if repo_or_path:
+        if os.path.isdir(repo_or_path):
+            file_path = os.path.join(repo_or_path, filename)
+        else:
+            # assume HF repo id
+            if not _HAS_HF:
+                raise RuntimeError("Install huggingface_hub to download weights from a repo id.")
+            file_path = hf_hub_download(repo_or_path, filename)
+    else:
+        # default local models folder
+        maybe = os.path.join(os.path.dirname(__file__), "..", "..", "models", filename)
+        maybe = os.path.abspath(maybe)
+        if os.path.exists(maybe):
+            file_path = maybe
+        else:
+            raise FileNotFoundError(f"Classifier weights not found at {maybe}. Provide repo_or_path or place file under models/.")
+
+    sd = torch.load(file_path, map_location="cpu")
+    model.load_state_dict(sd, strict=False)
     return model
+

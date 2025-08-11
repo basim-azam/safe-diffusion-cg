@@ -1,8 +1,13 @@
-# Safe Diffusion Guidance (Classifier Guidance)
 
-Minimal repo to run **Classifier Guidance (CG)** during Stable Diffusion generation using a mid-block safety classifier.
+# --- file: README.md ---
 
-> This package implements only the on-the-fly CG path (no post-hoc classification, no ESD/UCE/SLD, no dataset utilities).
+# Safe Diffusion Guidance (Minimal CG)
+
+Minimal, production-ready repository to run **Classifier Guidance (CG)** during Stable Diffusion generation using a mid-block feature classifier.
+
+- Supports **SD 1.4 / 1.5 / 2.1**
+- Works with your public weights: **`basimazam/safety-classifier-1280`**
+- Exposes a simple CLI: `sdg generate ...`
 
 ## Install
 
@@ -10,24 +15,20 @@ Minimal repo to run **Classifier Guidance (CG)** during Stable Diffusion generat
 pip install -e .
 ```
 
-Or run from source after installing deps:
+## Weights
+
+- Easiest: let the package auto-download from Hugging Face by passing `--classifier basimazam/safety-classifier-1280`.
+- Or, drop `safety_classifier_1280.pth` under `models/`.
+
+## Quickstart
 
 ```bash
-pip install -r requirements.txt
-```
-
-## Models
-
-Place `safety_classifier_1280.pth` in `models/`. See `models/README.md`.
-
-Supported base models (tested): **SD v1.4, v1.5, v2.1**.
-
-## CLI
-
-```bash
+# SD 1.5 + CG with defaults
 sdg generate \
   --prompt "a family having dinner" \
-  --method cg  # implied; only CG is implemented
+  --method cg \
+  --sd-version sd1_5 \
+  --classifier basimazam/safety-classifier-1280 \
   --cg-scales 3.5 \
   --mid-fracs 0.5 \
   --safe-idx 3 \
@@ -37,28 +38,21 @@ sdg generate \
   --out out/
 ```
 
-- `--cg-scales` and `--mid-fracs` accept a float **or** comma-separated list. When multiple values are provided, a sweep is run and (optionally) a grid is saved.
+## Programmatic
 
-List classes:
-```bash
-sdg classes
+```python
+from sdg.generation.cg_runner import SafeGuidanceRunner, CGParams
+runner = SafeGuidanceRunner(sd_version="sd1_5", classifier_repo_or_path="basimazam/safety-classifier-1280")
+img = runner.generate(
+    method="cg", prompt="a cute cat", steps=30, scale=7.5, seed=1234,
+    cg_params=CGParams(cg_scales=[3.5], mid_fracs=[0.5], safe_idx=3), out="out/")
 ```
 
-## Python quickstart
-
-See [`examples/quickstart_cg.py`](examples/quickstart_cg.py).
-
-## How it works (high level)
-
-- We register a mid-block forward hook on the UNet, capture the 1280×8×8 tensor.
-- A lightweight CNN classifier predicts logits over categories (`['gore','hate','medical','safe','sexual']`). We treat the **`safe`** index (default 3) as the target.
-- During a chosen tail window of the schedule (`mid_fraction`), we backpropagate `-log p(safe)` to the latents and **take a step** in the direction that increases `p(safe)` by `safety_scale`.
-- This is applied alongside normal classifier-free guidance (CFG).
+## Supported SD versions
+- `sd1_4` → `runwayml/stable-diffusion-v1-4`
+- `sd1_5` → `runwayml/stable-diffusion-v1-5`
+- `sd2_1` → `stabilityai/stable-diffusion-2-1-base`
 
 ## Notes
-
-- FP16 is supported for UNet/VAE. For the classifier, we evaluate in its native dtype (typically fp32).
-- Scheduler/device handling follows Diffusers execution device rules and works with CPU offload.
-- Only the CG method is included; no safety checker.
-
-See **SAFETY_GUIDE.md** and **MODEL_CARD.md** for details.
+- Only **`generate(method="cg")`** is implemented. No post-hoc classifiers, no ESD/UCE/SLD.
+- FP16 is auto-enabled on CUDA devices.

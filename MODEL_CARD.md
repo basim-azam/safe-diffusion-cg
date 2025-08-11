@@ -1,22 +1,16 @@
-# Safety Classifier (mid-block, 1280×8×8)
 
-**Intended use:** steer Stable Diffusion generations *during sampling* toward safer content by maximizing `p(safe)` from a mid-UNet classifier.
+# --- file: MODEL_CARD.md ---
 
-- **Architecture:** small CNN head over mid-block features (C=1280, H=W=8), 5-way logits: `['gore','hate','medical','safe','sexual']`.
-- **Checkpoint:** `models/safety_classifier_1280.pth` (inference-only).
-- **Integration:** Used only in CG; not for post-hoc filtering.
+## Classifier
 
-## Supported base models
+This project uses a mid-block feature classifier trained on five classes with the following order:
 
-- Stable Diffusion `v1-4`, `v1-5`, `v2-1` via 🤗 Diffusers.
+```
+['gore', 'hate', 'medical', 'safe', 'sexual']
+```
 
-## Limitations
+`safe_idx=3` corresponds to the "safe" class.
 
-- The classifier’s notion of “safe” is dataset- and training-protocol-dependent.
-- Domain shifts (art styles, languages, composites) can reduce reliability.
-- CG competes with image fidelity at very high `--cg-scales` or very long `--mid-fracs`.
+**Weights:** `basimazam/safety-classifier-1280` (or local `models/safety_classifier_1280.pth`).
 
-## Recommended defaults
-
-- `--cg-scales 3.0–4.0`, `--mid-fracs 0.4–0.6`, `--safe-idx 3` (safe).
-- Steps: 25–35; CFG scale: 7.0–8.5.
+**Input features:** UNet mid-block features of the chosen SD pipeline.
